@@ -1,6 +1,8 @@
 # GUITTON — XAUUSD
 
-Logiciel de trading de l'or (XAUUSD) uniquement.
+Logiciel de trading de l'or (XAUUSD) uniquement. Interface « verre dépoli » : ton logo en en-tête et en fond flouté,
+menu Analyse · Trade en cours · Historique · Réglages (barre d'onglets en bas sur téléphone).
+Les 10 maquettes proposées restent dans `guitton/designs/` (la n°5 est celle retenue).
 
 ```bash
 python3 guitton/server.py      # puis ouvrir http://localhost:8800

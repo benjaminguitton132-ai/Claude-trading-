@@ -2,3 +2,4 @@ trader/
 __pycache__/
 guitton/settings.json
 guitton/trade.json
+guitton/history.json

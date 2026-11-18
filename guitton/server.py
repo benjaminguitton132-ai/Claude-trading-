@@ -21,6 +21,8 @@ from feed import FEED  # noqa: E402
 PORT = int(os.environ.get("PORT", "8800"))
 SETTINGS = HERE / "settings.json"
 TRADE = HERE / "trade.json"
+HISTORY = HERE / "history.json"
+STATIC = {".webp": "image/webp", ".png": "image/png", ".svg": "image/svg+xml", ".jpg": "image/jpeg"}
 DEFAULTS = {"capital": 5000, "risk_pct": 1.0, "leverage": 20, "tp2_r": 2.0, "stop": "or-mid"}
 
 
@@ -76,10 +78,19 @@ class H(BaseHTTPRequestHandler):
         p = self.path.split("?")[0]
         if p in ("/", "/index.html"):
             return self.send(200, (HERE / "index.html").read_bytes(), "text/html")
+        if p.startswith("/static/"):
+            f = (HERE / "static" / Path(p).name)
+            if f.exists() and f.suffix in STATIC:
+                return self.send(200, f.read_bytes(), STATIC[f.suffix])
+            return self.send(404, {"error": "not found"})
         if p == "/api/price":
             b, ok = FEED.basis()
+            prev = FEED.gc_meta.get("chartPreviousClose") or FEED.gc_meta.get("previousClose")
             return self.send(200, {"price": FEED.price(), "basis": b, "basis_ok": ok,
+                                   "prev_close": round(prev - b, 2) if prev else None,
                                    "error": FEED.error, "server_time": time.time()})
+        if p == "/api/history":
+            return self.send(200, load(HISTORY, []))
         if p == "/api/candles":
             return self.send(200, {"candles": FEED.candles(150)})
         if p == "/api/settings":
@@ -102,8 +113,15 @@ class H(BaseHTTPRequestHandler):
             if b.get("clear"):
                 TRADE.unlink(missing_ok=True)
                 return self.send(200, None)
-            TRADE.write_text(json.dumps(b.get("trade"), indent=2))
-            return self.send(200, b.get("trade"))
+            tr = b.get("trade") or {}
+            if tr.get("closed") and not tr.get("archived"):
+                tr["archived"] = time.time()
+                h = load(HISTORY, [])
+                h.insert(0, {k: tr.get(k) for k in ("side", "entry", "sl0", "tp1", "tp2", "lots0", "R",
+                                                     "realized", "opened", "archived", "log")})
+                HISTORY.write_text(json.dumps(h[:200], indent=2))
+            TRADE.write_text(json.dumps(tr, indent=2))
+            return self.send(200, tr)
         self.send(404, {"error": "not found"})
 
 
