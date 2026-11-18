@@ -37,3 +37,15 @@ Python 3.9+ suffit, rien à installer.
 
 Aucun ordre n'est envoyé : GUITTON ne se connecte à aucun broker.
 Outil éducatif, pas un conseil financier.
+
+## Sur téléphone
+
+1. Sur le PC : `python3 guitton/server.py --lan`. Le terminal affiche l'adresse, par exemple `http://192.168.1.20:8800`.
+2. Sur le téléphone, connecté au **même Wi-Fi**, ouvre cette adresse.
+3. Pour l'avoir comme une app : iPhone (Safari) → Partager → « Sur l'écran d'accueil » ;
+   Android (Chrome) → ⋮ → « Ajouter à l'écran d'accueil ».
+
+Le PC doit rester allumé avec le serveur lancé. Si la page ne s'ouvre pas, autorise Python dans le pare-feu
+(Windows le demande au premier lancement : coche « Réseaux privés »).
+Hors de chez toi : installe Tailscale (gratuit) sur le PC et le téléphone et utilise l'adresse Tailscale du PC.
+N'expose pas GUITTON sur Internet : la page n'a pas de mot de passe.

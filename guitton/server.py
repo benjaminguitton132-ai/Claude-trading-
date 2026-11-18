@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """GUITTON: XAUUSD only.
 
-    python3 guitton/server.py      # then open http://localhost:8800
+    python3 guitton/server.py        # then open http://localhost:8800
+    python3 guitton/server.py --lan  # also reachable from a phone on the same Wi-Fi
 
 Standard library only (Python 3.9+). Nothing here can place an order.
 """
@@ -106,10 +107,27 @@ class H(BaseHTTPRequestHandler):
         self.send(404, {"error": "not found"})
 
 
+def lan_ip():
+    import socket
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        s.connect(("10.255.255.255", 1))
+        return s.getsockname()[0]
+    except OSError:
+        return None
+    finally:
+        s.close()
+
+
 def main():
     FEED.start()
-    srv = ThreadingHTTPServer(("127.0.0.1", PORT), H)
+    lan = "--lan" in sys.argv
+    srv = ThreadingHTTPServer(("0.0.0.0" if lan else "127.0.0.1", PORT), H)
     print("GUITTON sur http://localhost:%d  (Ctrl+C pour arrêter)" % PORT)
+    if lan:
+        ip = lan_ip()
+        print("Sur ton téléphone (même Wi-Fi) : http://%s:%d" % (ip or "<IP-du-PC>", PORT))
+        print("Attention : toute personne sur ce Wi-Fi peut ouvrir la page. À utiliser chez toi uniquement.")
     try:
         srv.serve_forever()
     except KeyboardInterrupt:
