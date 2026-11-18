@@ -19,6 +19,9 @@ from datetime import datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import xau  # noqa: E402
+
 APP = Path(__file__).resolve().parent
 ROOT = APP.parent
 SKILLS = ROOT / ".claude" / "skills"
@@ -36,6 +39,13 @@ DEFAULTS = {
     "target": "2R",
     "max_trades_per_day": 3,
     "sec_user_agent": "",     # "Nom email" pour la SEC (news 8-K, analyst)
+    # XAUUSD
+    "xau_session": "london",  # london / ny
+    "xau_leverage": 20,       # levier du broker, 1:x
+    "xau_spread": 0.35,       # spread moyen en $ par once
+    "xau_broker_price": "",   # prix XAUUSD affiché par ton broker (cale les niveaux)
+    "xau_stop": "or-mid",     # or-mid, or-opp, pct:0.3, atr:2
+    "xau_allow_short": True,
 }
 
 SCRIPTS = {
@@ -76,6 +86,16 @@ def save_settings(new):
     s["daily_loss_pct"] = min(max(0.1, float(s["daily_loss_pct"])), 20.0)
     s["leverage"] = min(max(1.0, float(s["leverage"])), 4.0)
     s["max_trades_per_day"] = int(s["max_trades_per_day"])
+    s["xau_session"] = s["xau_session"] if s["xau_session"] in ("london", "ny") else "london"
+    s["xau_leverage"] = min(max(1, int(float(s["xau_leverage"]))), 500)
+    s["xau_spread"] = min(max(0.0, float(s["xau_spread"] or 0)), 5.0)
+    try:
+        s["xau_broker_price"] = round(float(s["xau_broker_price"]), 2) if s["xau_broker_price"] not in ("", None) else ""
+    except ValueError:
+        s["xau_broker_price"] = ""
+    if not re.match(r"^(or-mid|or-opp|pct:[0-9.]+|atr:[0-9.]+)$", str(s["xau_stop"])):
+        s["xau_stop"] = "or-mid"
+    s["xau_allow_short"] = s["xau_allow_short"] in (True, "true", "1", 1, "on")
     SETTINGS.write_text(json.dumps(s, indent=2))
     return s
 
@@ -447,7 +467,12 @@ class Handler(BaseHTTPRequestHandler):
             s = load_settings()
             syms = [x for x in (b.get("symbols") or []) if x][:8]
             t0 = time.time()
-            results = [analyze(x, s) for x in syms]
+            results = []
+            for x in syms:
+                try:
+                    results.append(xau.analyze(s) if x.upper() == "XAUUSD" else analyze(x, s))
+                except Exception as e:  # noqa: BLE001 - one bad asset must not kill the batch
+                    results.append({"symbol": x, "error": "Erreur : %s" % e})
             return self._send(200, {"results": results, "seconds": round(time.time() - t0, 1),
                                     "settings": s})
         if self.path == "/api/scan":

@@ -97,7 +97,28 @@ th{color:var(--muted);font-weight:550;font-size:12.5px}
       <h2>1 · Actifs à analyser</h2>
       <div class="chips" id="chips"></div>
       <div class="add"><input id="custom" placeholder="Autre ticker (ex. AMD)" maxlength="7"><button class="btn ghost" id="addBtn">Ajouter</button></div>
-      <p class="hint">Le pack trade des actions et ETF américains : l'or passe par GLD, l'argent par SLV, le pétrole par USO, le bitcoin par IBIT. Achat uniquement (pas de vente à découvert).</p>
+      <p class="hint">Le pack trade des actions et ETF américains : l'or passe par GLD, l'argent par SLV, le pétrole par USO, le bitcoin par IBIT. Achat uniquement. <b>XAUUSD</b> a son propre moteur : achat et vente, lots, levier broker.</p>
+    </section>
+
+    <section class="panel" id="xauPanel">
+      <h2>Réglages XAUUSD</h2>
+      <div class="row">
+        <div><label for="xau_session">Session</label>
+          <select id="xau_session"><option value="london">Londres (range 9h00–9h15 Paris)</option><option value="ny">New York COMEX (range 14h20–14h35 Paris)</option></select></div>
+        <div><label for="xau_leverage">Levier broker</label>
+          <select id="xau_leverage"><option value="10">1:10</option><option value="20">1:20</option><option value="30">1:30</option><option value="50">1:50</option><option value="100">1:100</option><option value="200">1:200</option><option value="500">1:500</option></select></div>
+      </div>
+      <div class="row" style="margin-top:10px">
+        <div><label for="xau_stop">Stop</label>
+          <select id="xau_stop"><option value="or-mid">Milieu du range</option><option value="or-opp">Autre bord du range</option><option value="atr:2">2 × ATR 5 min</option><option value="pct:0.3">0,3 %</option><option value="pct:0.5">0,5 %</option></select></div>
+        <div><label for="xau_spread">Spread ($/oz)</label><input id="xau_spread" type="number" min="0" max="5" step="0.05"></div>
+      </div>
+      <div class="row" style="margin-top:10px">
+        <div><label for="xau_broker_price">Prix XAUUSD broker</label><input id="xau_broker_price" type="number" step="0.01" placeholder="optionnel"></div>
+        <div><label for="xau_allow_short">Ventes</label>
+          <select id="xau_allow_short"><option value="true">Achat + vente</option><option value="false">Achat seul</option></select></div>
+      </div>
+      <p class="hint">Données : contrat à terme or COMEX (GC=F), qui cote quelques $ au-dessus du spot. Entre le prix XAUUSD de ton broker pour décaler tous les niveaux. 1 lot = 100 oz.</p>
     </section>
 
     <section class="panel">
@@ -130,20 +151,20 @@ th{color:var(--muted);font-weight:550;font-size:12.5px}
 <p class="foot">Outil éducatif, pas un conseil financier. Données Yahoo gratuites, retardées. Aucun ordre n'est envoyé depuis cette page : un ordre ne part que via Claude, en paper trading par défaut, après ton « oui ».</p>
 
 <script>
-const PRESETS=[["GLD","Or"],["SLV","Argent"],["USO","Pétrole"],["SPY","S&P 500"],["QQQ","Nasdaq"],["IBIT","Bitcoin"],["TSLA","Tesla"],["NVDA","Nvidia"],["AAPL","Apple"]];
-const sel=new Set(["GLD"]);const extra=[];
+const PRESETS=[["XAUUSD","Or spot"],["GLD","Or ETF"],["SLV","Argent"],["USO","Pétrole"],["SPY","S&P 500"],["QQQ","Nasdaq"],["IBIT","Bitcoin"],["TSLA","Tesla"],["NVDA","Nvidia"],["AAPL","Apple"]];
+const sel=new Set(["XAUUSD"]);const extra=[];
 const $=id=>document.getElementById(id);
 const esc=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 const usd=x=>x==null?"–":"$"+Number(x).toLocaleString("fr-FR",{minimumFractionDigits:2,maximumFractionDigits:2});
 const pc=x=>x==null?"–":(x*100).toFixed(1).replace(".",",")+" %";
-const FIELDS=["capital","risk_pct","leverage","daily_loss_pct","stop","target","sec_user_agent"];
+const FIELDS=["capital","risk_pct","leverage","daily_loss_pct","stop","target","sec_user_agent","xau_session","xau_leverage","xau_stop","xau_spread","xau_broker_price","xau_allow_short"];
 
 function chips(){
   const all=[...PRESETS,...extra.map(s=>[s,""])];
   $("chips").innerHTML=all.map(([s,n])=>`<button class="chip ${sel.has(s)?"on":""}" data-s="${s}">${n?esc(n)+"<small>"+s+"</small>":s}</button>`).join("");
   $("chips").querySelectorAll(".chip").forEach(b=>b.onclick=()=>{const s=b.dataset.s;sel.has(s)?sel.delete(s):sel.add(s);chips()});
 }
-function addSym(s){s=s.trim().toUpperCase();if(!/^[A-Z]{1,5}(\.[A-Z])?$/.test(s))return;if(!PRESETS.some(p=>p[0]===s)&&!extra.includes(s))extra.push(s);sel.add(s);chips()}
+function addSym(s){s=s.trim().toUpperCase();if(s!=="XAUUSD"&&!/^[A-Z]{1,5}(\.[A-Z])?$/.test(s))return;if(!PRESETS.some(p=>p[0]===s)&&!extra.includes(s))extra.push(s);sel.add(s);chips()}
 $("addBtn").onclick=()=>{addSym($("custom").value);$("custom").value=""};
 $("custom").onkeydown=e=>{if(e.key==="Enter")$("addBtn").click()};
 
@@ -151,14 +172,51 @@ async function api(path,body){
   const r=await fetch(path,body?{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)}:{});
   return r.json();
 }
-async function loadSettings(){const s=await api("/api/settings");FIELDS.forEach(k=>{if(s[k]!=null)$(k).value=s[k]})}
+async function loadSettings(){const s=await api("/api/settings");FIELDS.forEach(k=>{if(s[k]!=null)$(k).value=String(s[k])})}
 async function clock(){
   try{const c=await api("/api/clock");const el=$("clock");
     el.textContent=c.open?`Marché ouvert · ${c.now_new_york.slice(-5)} NY`:`Marché fermé · ${c.now_new_york?.slice(-5)} NY · ouverture ${String(c.next_open||"").slice(-5)}`;
     el.className="clock"+(c.open?" open":"");}catch(e){}
 }
 
+const icon={ok:"✓",warn:"!",fail:"✕",skip:"–"};
+function stepsHtml(r){return `<div class="steps">`+r.steps.map(s=>`<details class="st"><summary><span class="ic ${s.status}">${icon[s.status]}</span><span class="sk">${esc(s.title)}<small>${esc(s.skill)}</small></span><span class="sm">${esc(s.summary)}</span></summary>${s.text||s.data?`<pre>${esc(s.text||JSON.stringify(s.data,null,2).slice(0,6000))}</pre>`:""}</details>`).join("")+`</div>`}
+function oddsHtml(o,avg,title){if(!o)return "";return `<div class="odds"><b>${title}</b> · 10 000 replays
+  <div class="bar"><span style="width:${o.p_target*100}%;background:var(--go)"></span><span style="width:${o.p_neither*100}%;background:var(--skip)"></span><span style="width:${o.p_stop*100}%;background:var(--bad)"></span></div>
+  <div class="legend"><span><i class="dot" style="background:var(--go)"></i>Objectif d'abord ${pc(o.p_target)}</span><span><i class="dot" style="background:var(--skip)"></i>Ni l'un ni l'autre ${pc(o.p_neither)}</span><span><i class="dot" style="background:var(--bad)"></i>Stop d'abord ${pc(o.p_stop)}</span><span>R moyen ${o.avg_R}</span></div></div>`}
+function xauCard(r){
+  const t=r.trade||{};const c=t.context||{};const hi=t.history||{};
+  let h=`<div class="card"><div class="card-head"><span class="sym">XAUUSD</span><span class="badge ${t.level}">${esc(t.headline)}</span>
+    <span class="mode">${esc(t.session)} · ${r.mode==="live"?"Direct":"Répétition sur la séance du "+esc((t.as_of||"").slice(0,10))} · GC=F ${t.source_price}${t.offset?` · décalage broker ${t.offset>0?"+":""}${t.offset}`:""}</span></div>
+    <div class="grid">
+      <div class="kpi"><div class="l">Range d'ouverture</div><div class="v">${t.range?t.range.low+" – "+t.range.high:"–"}</div></div>
+      <div class="kpi"><div class="l">Tendance jour</div><div class="v">${esc(c.trend)}</div></div>
+      <div class="kpi"><div class="l">RSI 14 jours</div><div class="v">${c.rsi??"–"}</div></div>
+      <div class="kpi"><div class="l">ATR jour</div><div class="v">${c.atr_daily??"–"} $</div></div>
+    </div>`;
+  (t.sides||[]).forEach(x=>{
+    const z=x.size||{};const buy=x.side==="buy";const b=x.broker||x;
+    h+=`<div class="odds" style="border-top:2px solid ${buy?"var(--go)":"var(--bad)"}"><b style="color:${buy?"var(--go)":"var(--bad)"}">${esc(x.order)}</b> ${x.verdict==="PASS"?'<span class="badge go">PASS</span>':'<span class="badge bad">BLOCK</span>'}
+      ${x.real_outcome?`<span class="mode"> · ce jour-là : ${x.real_outcome.outcome==="target"?"objectif atteint":x.real_outcome.outcome==="stop"?"stop touché":"clôturé en fin de séance"} (${x.real_outcome.R>0?"+":""}${x.real_outcome.R}R)</span>`:""}</div>
+    <div class="grid">
+      <div class="kpi"><div class="l">Entrée</div><div class="v">${usd(b.entry)}</div></div>
+      <div class="kpi"><div class="l">Stop loss</div><div class="v bad">${usd(b.stop)}</div></div>
+      <div class="kpi"><div class="l">Take profit</div><div class="v go">${usd(b.target)}</div></div>
+      <div class="kpi"><div class="l">Lots</div><div class="v">${z.lots??"–"}</div></div>
+      <div class="kpi"><div class="l">Marge (1:${z.broker_leverage??"–"})</div><div class="v">${usd(z.margin)}</div></div>
+      <div class="kpi"><div class="l">Levier effectif</div><div class="v">${z.leverage_used!=null?String(z.leverage_used).replace(".",",")+"x":"–"}</div></div>
+      <div class="kpi"><div class="l">Perte max (spread inclus)</div><div class="v bad">${z.max_loss!=null?"-"+usd(z.max_loss):"–"}</div></div>
+      <div class="kpi"><div class="l">Gain au TP</div><div class="v go">${z.gain_at_target!=null?"+"+usd(z.gain_at_target):"–"}</div></div>
+    </div>${oddsHtml(x.tm,null,"Time Machine")}
+    ${(x.reasons||[]).length?`<div class="warnbox">Blocage : ${x.reasons.map(esc).join(" · ")}</div>`:""}${z.refusal?`<div class="warnbox">${esc(z.refusal)}</div>`:""}`;
+  });
+  h+=`<div class="odds">Historique de la règle (${hi.sessions} séances) : ${hi.triggered} signaux → ${hi.target} TP, ${hi.stop} SL, ${hi.close} clôtures. R moyen ${hi.avg_R}.</div>`;
+  if(t.tickets)h+=`<pre>${esc(t.tickets.join("\n"))}</pre>`;
+  if(t.news&&t.news.length)h+=`<div class="news"><b>Actualités or / macro</b><ul>${t.news.map(n=>`<li><a href="${esc(n.link)}" target="_blank" rel="noopener">${esc(n.title)}</a> <span style="color:var(--muted)">${esc((n.time||"").slice(5,16).replace("T"," "))}${n.tags.length?" · "+n.tags.map(esc).join(", "):""}</span></li>`).join("")}</ul></div>`;
+  return h+stepsHtml(r)+`</div>`;
+}
 function card(r){
+  if(r.trade&&r.trade.kind==="xau")return xauCard(r);
   if(r.error&&!r.steps)return `<div class="card"><div class="card-head"><span class="sym">${esc(r.symbol)}</span><span class="badge bad">${esc(r.error)}</span></div></div>`;
   const t=r.trade||{};const lvl=t.risk_verdict==="BLOCK"&&r.mode==="live"?"bad":(t.level||"none");
   let h=`<div class="card"><div class="card-head"><span class="sym">${esc(r.symbol)}</span><span class="badge ${lvl}">${esc(t.headline||r.error||"")}</span>
@@ -188,9 +246,7 @@ function card(r){
   }
   if(t.risk_reasons&&t.risk_reasons.length)h+=`<div class="warnbox">Raisons du blocage : ${t.risk_reasons.map(esc).join(" · ")}</div>`;
   if(t.news&&t.news.length)h+=`<div class="news"><b>Actualités</b><ul>${t.news.map(n=>`<li><a href="${esc(n.link)}" target="_blank" rel="noopener">${esc(n.title)}</a> <span style="color:var(--muted)">${esc((n.time||"").slice(5,16).replace("T"," "))}${n.tags&&n.tags.length?" · "+n.tags.map(esc).join(", "):""}</span></li>`).join("")}</ul></div>`;
-  const icon={ok:"✓",warn:"!",fail:"✕",skip:"–"};
-  h+=`<div class="steps">`+r.steps.map(s=>`<details class="st"><summary><span class="ic ${s.status}">${icon[s.status]}</span><span class="sk">${esc(s.title)}<small>${esc(s.skill)}</small></span><span class="sm">${esc(s.summary)}</span></summary>${s.text||s.data?`<pre>${esc(s.text||JSON.stringify(s.data,null,2).slice(0,6000))}</pre>`:""}</details>`).join("")+`</div>`;
-  return h+`</div>`;
+  return h+stepsHtml(r)+`</div>`;
 }
 
 $("go").onclick=async()=>{
@@ -198,7 +254,7 @@ $("go").onclick=async()=>{
   const body={};FIELDS.forEach(k=>body[k]=$(k).value);await api("/api/settings",body);
   $("go").disabled=true;$("status").innerHTML=`<span class="spin"></span>Analyse de ${syms.join(", ")}… (≈ 5–10 s par actif)`;
   try{const d=await api("/api/analyze",{symbols:syms});
-    const order={go:0,wait:1,none:2};d.results.sort((a,b)=>(order[a.trade?.level]??3)-(order[b.trade?.level]??3));
+    const order={go:0,wait:1,bad:2,none:3};d.results.sort((a,b)=>(order[a.trade?.level]??3)-(order[b.trade?.level]??3));
     $("out").innerHTML=d.results.map(card).join("");$("status").textContent=`Terminé en ${d.seconds} s.`;
   }catch(e){$("status").textContent="Erreur : "+e}
   $("go").disabled=false;
