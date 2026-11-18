@@ -1,4 +1,4 @@
 trader/
 __pycache__/
-app/runs/
-app/settings.json
+guitton/settings.json
+guitton/trade.json
