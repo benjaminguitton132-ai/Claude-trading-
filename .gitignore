@@ -1,2 +1,4 @@
 trader/
 __pycache__/
+app/runs/
+app/settings.json
